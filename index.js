@@ -1,14 +1,35 @@
 const express = require('express');
 const cors = require('cors');
-require('dotenv').config()
+require('dotenv').config();
+const jwt = require('jsonwebtoken');
+const cookieparser = require('cookie-parser');
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const app = express();
 const port = process.env.PORT || 5000;
 
 
 // Midelware
-app.use(cors());
+app.use(cors({
+  origin: ['http://localhost:5173' , 'http://localhost:5174'],
+  credentials: true
+}));
+
 app.use(express.json());
+app.use(cookieparser());
+
+const VeryfiedToken = async (req, res, next) => {
+  const token = req.cookies.token;
+  if (!token){
+    return res.status(401).send({ message: 'Unauthorize access' });
+  }
+  jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded)=>{
+    if(err){
+      return res.status(403).send({ message: 'Invalid token' });
+    }
+    req.user = decoded;
+    next();
+  })
+}
 
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.hflxk.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
@@ -30,7 +51,21 @@ async function run() {
     const BookingsCollection = client.db('CarServicesDB').collection('Bookings');
     
 
-    //services
+    // Auth Related api methods
+    app.post("/jwt", async (req, res) => {
+      const user = req.body;
+      // console.log(user);
+      const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, {
+        expiresIn: '1h',
+      })
+      res.cookie('token', token, {
+        httpOnly: true,
+        secure: false,
+      })
+      res.send(token);
+    })
+
+    //services related api methods
     app.get("/services", async (req, res) => {
       const services = await ServicesCollection.find().toArray();
       res.json(services);
@@ -50,15 +85,24 @@ async function run() {
 
 
 
-    //bookings
+    //bookings related api methods
     app.get("/bookings", async (req, res) => {
       const booking = await BookingsCollection.find().toArray();
       res.send(booking);
     })
 
-    app.get("/bookings/:email", async (req, res) => {
+    app.get("/bookings/:email",VeryfiedToken, async (req, res) => {
+      if(req.params.email !== req.user.email) {
+        return res.status(401).send({ message: 'Unauthorize access' });
+      }
       const qury = {email: req.params.email};
       const booking = await BookingsCollection.find(qury).toArray();
+      res.send(booking);
+    })
+
+    app.get("/bookings/:id",async (req, res) => {
+      const qury = {_id: new ObjectId(req.params.id)};
+      const booking = await BookingsCollection.findOne(qury);
       res.send(booking);
     })
 
@@ -69,7 +113,29 @@ async function run() {
     })
 
 
-    
+    app.patch("/bookings/:id", async (req, res) => {
+      const id = req.params.id;
+      const qury = {_id: new ObjectId(id)};
+      const booking = req.body;
+      const UpdatedBookings = {
+        $set:{
+          status: booking.status
+        },
+      };
+      const result = await BookingsCollection.updateOne(qury, UpdatedBookings);
+      res.send(result);
+    })
+
+
+
+    app.delete("/bookings/:id", async (req, res) => {
+      const qury = {_id: new ObjectId(req.params.id)};
+      const result = await BookingsCollection.deleteOne(qury);
+      res.send(result);
+    })
+
+
+
     await client.db("admin").command({ ping: 1 });
     console.log("Pinged your deployment. You successfully connected to MongoDB!");
   } finally {
