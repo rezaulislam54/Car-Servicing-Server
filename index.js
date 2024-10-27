@@ -54,7 +54,6 @@ async function run() {
     // Auth Related api methods
     app.post("/jwt", async (req, res) => {
       const user = req.body;
-      // console.log(user);
       const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, {
         expiresIn: '1h',
       })
@@ -63,6 +62,12 @@ async function run() {
         secure: false,
       })
       res.send(token);
+    })
+
+    app.post('/logout', async (req, res) => {
+      const user = req.body;
+      console.log('logout user',user);
+      res.clearCookie('token', {maxAge: 0}).send({success: true});
     })
 
     //services related api methods
@@ -86,12 +91,13 @@ async function run() {
 
 
     //bookings related api methods
-    app.get("/bookings", async (req, res) => {
+    app.get("/bookings", VeryfiedToken, async (req, res) => {
       const booking = await BookingsCollection.find().toArray();
       res.send(booking);
     })
 
     app.get("/bookings/:email",VeryfiedToken, async (req, res) => {
+      // console.log(req.params.email);
       if(req.params.email !== req.user.email) {
         return res.status(401).send({ message: 'Unauthorize access' });
       }
@@ -100,7 +106,7 @@ async function run() {
       res.send(booking);
     })
 
-    app.get("/bookings/:id",async (req, res) => {
+    app.get("/bookings/:id", VeryfiedToken, async (req, res) => {
       const qury = {_id: new ObjectId(req.params.id)};
       const booking = await BookingsCollection.findOne(qury);
       res.send(booking);
