@@ -61,7 +61,7 @@ async function run() {
         httpOnly: true,
         secure: false,
       })
-      res.send(token);
+      res.send({success: true});
     })
 
     app.post('/logout', async (req, res) => {
